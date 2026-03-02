@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Drop Simulation</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<script>
+const canvas = document.getElementById('canvas');
+const gl = canvas.getContext('webgl2');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let drops = [];
+
+class Drop {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.radius = 5;
+        this.velocityY = 0;
+        this.bounceFactor = 0.7;
+    }
+
+    update() {
+        this.velocityY += 0.1; // gravity
+        this.y += this.velocityY;
+
+        if (this.y + this.radius > canvas.height) {
+            this.y = canvas.height - this.radius;
+            this.velocityY *= -this.bounceFactor; // bounce back
+        }
+    }
+
+    draw() {
+        const shaderProgram = createShaderProgram();
+        gl.useProgram(shaderProgram);
+        // Render drop here with WebGL (implement rendering logic)
+    }
+}
+
+function createShaderProgram() {
+    // Shader creation logic here
+    return null; // placeholder
+}
+
+function render() {
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    drops.forEach(drop => {
+        drop.update();
+        drop.draw();
+    });
+
+    requestAnimationFrame(render);
+}
+
+canvas.addEventListener('click', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    drops.push(new Drop(x, y));
+});
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Real-Time Water Drop Simulation</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #070b15; }
+    #app { width: 100%; height: 100%; position: relative; }
+    canvas { width: 100%; height: 100%; display: block; }
+    #hud {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      color: #d6e7ff;
+      background: rgba(6, 14, 30, 0.45);
+      border: 1px solid rgba(130, 160, 220, 0.3);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font: 12px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      backdrop-filter: blur(6px);
+      pointer-events: none;
+      max-width: 360px;
+      text-shadow: 0 1px 1px rgba(0,0,0,0.4);
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <canvas id="simCanvas"></canvas>
+    <div id="hud">Click/tap to spawn falling drops. Move mouse to steer light direction.</div>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const clamp = (v, mn, mx) => Math.max(mn, Math.min(mx, v));
+      const lerp = (a, b, t) => a + (b - a) * t;
+
+      class HeightFieldSimulation {
+        constructor(size = 160, extent = 6.0) {
+          this.size = size;
+          this.extent = extent;
+          this.dx = (extent * 2) / (size - 1);
+          this.height = new Float32Array(size * size);
+          this.velocity = new Float32Array(size * size);
+          this.acc = new Float32Array(size * size);
+          this.gravity = 9.81;
+          this.waveSpeed = 5.5;
+          this.damping = 0.85;
+          this.surfaceTension = 0.22;
+          this.maxDt = 1 / 120;
+        }
+
+        index(i, j) { return i + j * this.size; }
+
+        sampleHeightWorld(x, z) {
+          const u = (x / (this.extent * 2)) + 0.5;
+          const v = (z / (this.extent * 2)) + 0.5;
+          const fx = clamp(u, 0, 1) * (this.size - 1);
+          const fz = clamp(v, 0, 1) * (this.size - 1);
+          const x0 = Math.floor(fx), z0 = Math.floor(fz);
+          const x1 = Math.min(this.size - 1, x0 + 1), z1 = Math.min(this.size - 1, z0 + 1);
+          const tx = fx - x0, tz = fz - z0;
+          const h00 = this.height[this.index(x0, z0)];
+          const h10 = this.height[this.index(x1, z0)];
+          const h01 = this.height[this.index(x0, z1)];
+          const h11 = this.height[this.index(x1, z1)];
+          return lerp(lerp(h00, h10, tx), lerp(h01, h11, tx), tz);
+        }
+
+        addImpact(x, z, radius, strength) {
+          const r2 = radius * radius;
+          const s = this.size;
+          const worldToGrid = (v) => ((v / (this.extent * 2)) + 0.5) * (s - 1);
+          const gx = worldToGrid(x);
+          const gz = worldToGrid(z);
+          const cellRadius = Math.max(1, Math.ceil(radius / this.dx));
+          const minX = clamp(Math.floor(gx - cellRadius), 1, s - 2);
+          const maxX = clamp(Math.ceil(gx + cellRadius), 1, s - 2);
+          const minZ = clamp(Math.floor(gz - cellRadius), 1, s - 2);
+          const maxZ = clamp(Math.ceil(gz + cellRadius), 1, s - 2);
+          for (let j = minZ; j <= maxZ; j++) {
+            for (let i = minX; i <= maxX; i++) {
+              const wx = ((i / (s - 1)) - 0.5) * this.extent * 2;
+              const wz = ((j / (s - 1)) - 0.5) * this.extent * 2;
+              const dx = wx - x;
+              const dz = wz - z;
+              const d2 = dx * dx + dz * dz;
+              if (d2 <= r2) {
+                const idx = this.index(i, j);
+                const impulse = Math.exp(-d2 / (r2 * 0.45)) * strength;
+                this.velocity[idx] += impulse;
+              }
+            }
+          }
+        }
+
+        step(dt) {
+          dt = Math.min(dt, this.maxDt);
+          const n = this.size;
+          const h = this.height;
+          const v = this.velocity;
+          const a = this.acc;
+          const invDx2 = 1.0 / (this.dx * this.dx);
+          const c2 = this.waveSpeed * this.waveSpeed;
+
+          for (let j = 1; j < n - 1; j++) {
+            for (let i = 1; i < n - 1; i++) {
+              const idx = i + j * n;
+              const hC = h[idx];
+              const lap = (h[idx - 1] + h[idx + 1] + h[idx - n] + h[idx + n] - 4 * hC) * invDx2;
+              a[idx] = c2 * lap - this.damping * v[idx] + this.surfaceTension * lap;
+            }
+          }
+
+          for (let j = 1; j < n - 1; j++) {
+            for (let i = 1; i < n - 1; i++) {
+              const idx = i + j * n;
+              v[idx] += a[idx] * dt;
+              h[idx] += v[idx] * dt;
+            }
+          }
+
+          for (let i = 0; i < n; i++) {
+            const top = i;
+            const bot = i + (n - 1) * n;
+            h[top] = h[top + n] * 0.95;
+            h[bot] = h[bot - n] * 0.95;
+            v[top] *= 0.5;
+            v[bot] *= 0.5;
+          }
+          for (let j = 0; j < n; j++) {
+            const left = j * n;
+            const right = left + (n - 1);
+            h[left] = h[left + 1] * 0.95;
+            h[right] = h[right - 1] * 0.95;
+            v[left] *= 0.5;
+            v[right] *= 0.5;
+          }
+        }
+      }
+
+      class DropSystem {
+        constructor(sim) {
+          this.sim = sim;
+          this.drops = [];
+          this.maxDrops = 450;
+          this.dragCoeff = 0.22;
+          this.g = -9.81;
+        }
+
+        spawn(x, z, count = 1, spread = 0.28, y = 2.8, speed = -0.2) {
+          for (let i = 0; i < count; i++) {
+            if (this.drops.length >= this.maxDrops) this.drops.shift();
+            const angle = Math.random() * Math.PI * 2;
+            const rad = Math.random() * spread;
+            const px = x + Math.cos(angle) * rad;
+            const pz = z + Math.sin(angle) * rad;
+            const r = 0.05 + Math.random() * 0.025;
+            this.drops.push({
+              x: px, y: y + Math.random() * 0.45, z: pz,
+              vy: speed - Math.random() * 0.5,
+              radius: r,
+              baseRadius: r,
+              wobblePhase: Math.random() * 100,
+              flatten: 0,
+              life: 2.5
+            });
+          }
+        }
+
+        step(dt) {
+          const secSpawn = [];
+          for (let k = this.drops.length - 1; k >= 0; k--) {
+            const d = this.drops[k];
+            const area = Math.PI * d.radius * d.radius;
+            const drag = this.dragCoeff * area * d.vy * Math.abs(d.vy);
+            const accel = this.g - Math.sign(d.vy) * drag * 0.6;
+            d.vy += accel * dt;
+            d.y += d.vy * dt;
+            d.wobblePhase += dt * 13.0;
+            d.flatten = clamp(Math.abs(d.vy) * 0.04 + Math.sin(d.wobblePhase) * 0.05, 0, 0.45);
+            d.life -= dt;
+
+            const waterY = this.sim.sampleHeightWorld(d.x, d.z);
+            if (d.y <= waterY + d.radius * 0.35) {
+              const impactSpeed = Math.max(0.8, Math.abs(d.vy));
+              const impulse = -impactSpeed * d.radius * 2.8;
+              this.sim.addImpact(d.x, d.z, 0.18 + d.radius * 3.5, impulse);
+
+              const nSecondary = 2 + Math.floor(Math.random() * 3);
+              for (let i = 0; i < nSecondary; i++) {
+                const a = Math.random() * Math.PI * 2;
+                const s = 0.25 + Math.random() * 0.75;
+                secSpawn.push({
+                  x: d.x + Math.cos(a) * 0.06,
+                  y: waterY + 0.03,
+                  z: d.z + Math.sin(a) * 0.06,
+                  vy: s * (0.85 + Math.random() * 0.95),
+                  vx: Math.cos(a) * s,
+                  vz: Math.sin(a) * s,
+                  radius: d.baseRadius * (0.28 + Math.random() * 0.24),
+                  ttl: 0.8 + Math.random() * 0.6
+                });
+              }
+              this.drops.splice(k, 1);
+            } else if (d.life <= 0 || d.y < -1.0 || Math.abs(d.x) > this.sim.extent * 1.3 || Math.abs(d.z) > this.sim.extent * 1.3) {
+              this.drops.splice(k, 1);
+            }
+          }
+
+          for (const s of secSpawn) {
+            if (this.drops.length >= this.maxDrops) break;
+            this.drops.push({
+              x: s.x, y: s.y, z: s.z,
+              vy: s.vy,
+              vx: s.vx,
+              vz: s.vz,
+              radius: s.radius,
+              baseRadius: s.radius,
+              wobblePhase: Math.random() * 50,
+              flatten: 0,
+              life: s.ttl,
+              secondary: true
+            });
+          }
+
+          for (const d of this.drops) {
+            if (d.secondary) {
+              d.vy += this.g * dt;
+              d.x += (d.vx || 0) * dt;
+              d.z += (d.vz || 0) * dt;
+              const waterY = this.sim.sampleHeightWorld(d.x, d.z);
+              if (d.y <= waterY + d.radius * 0.4) {
+                this.sim.addImpact(d.x, d.z, 0.08 + d.radius * 2.0, -Math.abs(d.vy) * d.radius * 1.5);
+                d.life = -1;
+              }
+            }
+          }
+          this.drops = this.drops.filter(d => d.life > 0);
+        }
+      }
+
+      class WebGLRenderer {
+        constructor(canvas, sim, drops) {
+          this.canvas = canvas;
+          this.sim = sim;
+          this.drops = drops;
+          this.gl = canvas.getContext('webgl2', { antialias: true, alpha: false, depth: true });
+          if (!this.gl) throw new Error('WebGL2 not supported');
+          this.lightDir = [0.45, 0.85, 0.2];
+          this.time = 0;
+          this.init();
+        }
+
+        createShader(type, src) {
+          const gl = this.gl;
+          const sh = gl.createShader(type);
+          gl.shaderSource(sh, src);
+          gl.compileShader(sh);
+          if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+            const msg = gl.getShaderInfoLog(sh);
+            gl.deleteShader(sh);
+            throw new Error('Shader compile failed: ' + msg);
+          }
+          return sh;
+        }
+
+        createProgram(vs, fs) {
+          const gl = this.gl;
+          const p = gl.createProgram();
+          gl.attachShader(p, this.createShader(gl.VERTEX_SHADER, vs));
+          gl.attachShader(p, this.createShader(gl.FRAGMENT_SHADER, fs));
+          gl.linkProgram(p);
+          if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+            const msg = gl.getProgramInfoLog(p);
+            gl.deleteProgram(p);
+            throw new Error('Program link failed: ' + msg);
+          }
+          return p;
+        }
+
+        init() {
+          const gl = this.gl;
+          const s = this.sim.size;
+          const nVerts = s * s;
+          const pos = new Float32Array(nVerts * 2);
+          let p = 0;
+          for (let j = 0; j < s; j++) {
+            for (let i = 0; i < s; i++) {
+              pos[p++] = i / (s - 1);
+              pos[p++] = j / (s - 1);
+            }
+          }
+
+          const idx = [];
+          for (let j = 0; j < s - 1; j++) {
+            for (let i = 0; i < s - 1; i++) {
+              const a = i + j * s;
+              const b = a + 1;
+              const c = a + s;
+              const d = c + 1;
+              idx.push(a, c, b, b, c, d);
+            }
+          }
+          this.indexCount = idx.length;
+
+          this.heightTex = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, this.heightTex);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, s, s, 0, gl.RED, gl.FLOAT, this.sim.height);
+
+          const vs = `#version 300 es
+            precision highp float;
+            layout(location=0) in vec2 aUV;
+            uniform sampler2D uHeight;
+            uniform float uExtent;
+            uniform mat4 uMVP;
+            uniform float uTexel;
+            out vec3 vWorld;
+            out vec3 vNormal;
+            void main(){
+              float h = texture(uHeight, aUV).r;
+              float hL = texture(uHeight, aUV + vec2(-uTexel,0.0)).r;
+              float hR = texture(uHeight, aUV + vec2(uTexel,0.0)).r;
+              float hD = texture(uHeight, aUV + vec2(0.0,-uTexel)).r;
+              float hU = texture(uHeight, aUV + vec2(0.0,uTexel)).r;
+              vec2 xz = (aUV - 0.5) * (uExtent * 2.0);
+              vWorld = vec3(xz.x, h, xz.y);
+              vec3 dx = normalize(vec3((uExtent*2.0)*uTexel*2.0, hR-hL, 0.0));
+              vec3 dz = normalize(vec3(0.0, hU-hD, (uExtent*2.0)*uTexel*2.0));
+              vNormal = normalize(cross(dz, dx));
+              gl_Position = uMVP * vec4(vWorld, 1.0);
+            }
+          `;
+
+          const fs = `#version 300 es
+            precision highp float;
+            in vec3 vWorld;
+            in vec3 vNormal;
+            uniform vec3 uCamPos;
+            uniform vec3 uLightDir;
+            out vec4 fragColor;
+
+            vec3 envColor(vec3 dir){
+              float t = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
+              vec3 skyTop = vec3(0.22,0.48,0.85);
+              vec3 skyMid = vec3(0.52,0.72,0.95);
+              vec3 horizon = vec3(0.90,0.93,0.98);
+              vec3 ground = vec3(0.02,0.05,0.08);
+              vec3 sky = mix(horizon, skyTop, smoothstep(0.3, 1.0, t));
+              sky = mix(skyMid, sky, smoothstep(0.0, 1.0, t));
+              return mix(ground, sky, smoothstep(0.0, 0.2, dir.y));
+            }
+
+            void main(){
+              vec3 N = normalize(vNormal);
+              vec3 V = normalize(uCamPos - vWorld);
+              vec3 L = normalize(uLightDir);
+              vec3 R = reflect(-V, N);
+
+              float fresnel = pow(1.0 - max(dot(N, V), 0.0), 5.0);
+              fresnel = mix(0.02, 1.0, fresnel);
+
+              vec3 reflected = envColor(R);
+              vec3 transmitted = vec3(0.01, 0.11, 0.16);
+              float diffuse = max(dot(N, L), 0.0) * 0.15;
+              vec3 H = normalize(V + L);
+              float spec = pow(max(dot(N, H), 0.0), 160.0);
+              vec3 color = mix(transmitted, reflected, fresnel) + vec3(1.0) * spec * 1.7 + diffuse * vec3(0.15,0.24,0.3);
+
+              color = pow(color, vec3(1.0/2.2));
+              fragColor = vec4(color, 0.98);
+            }
+          `;
+
+          const dropVs = `#version 300 es
+            precision highp float;
+            layout(location=0) in vec3 aPos;
+            layout(location=1) in float aRadius;
+            layout(location=2) in float aFlatten;
+            uniform mat4 uMVP;
+            out float vFlatten;
+            out float vRadius;
+            void main(){
+              gl_Position = uMVP * vec4(aPos, 1.0);
+              float perspective = clamp(700.0 / max(1.0, gl_Position.w), 1.0, 80.0);
+              gl_PointSize = max(2.5, aRadius * 180.0 * perspective);
+              vFlatten = aFlatten;
+              vRadius = aRadius;
+            }
+          `;
+
+          const dropFs = `#version 300 es
+            precision highp float;
+            in float vFlatten;
+            in float vRadius;
+            uniform vec3 uLightDir;
+            out vec4 fragColor;
+            void main(){
+              vec2 uv = gl_PointCoord * 2.0 - 1.0;
+              float yScale = 1.0 - vFlatten * 0.55;
+              vec2 e = vec2(uv.x, uv.y / max(0.3, yScale));
+              float r2 = dot(e,e);
+              if (r2 > 1.0) discard;
+              float z = sqrt(max(0.0, 1.0 - r2));
+              vec3 N = normalize(vec3(e.x, e.y, z));
+              vec3 L = normalize(uLightDir);
+              float diff = max(dot(N, L), 0.0);
+              float spec = pow(max(dot(reflect(-L, N), vec3(0.0,0.0,1.0)), 0.0), 80.0);
+              vec3 col = vec3(0.35,0.62,0.88) * (0.25 + 0.75*diff) + vec3(1.0)*spec;
+              col = pow(col, vec3(1.0/2.2));
+              fragColor = vec4(col, smoothstep(1.0, 0.4, r2) * 0.95);
+            }
+          `;
+
+          this.program = this.createProgram(vs, fs);
+          this.dropProgram = this.createProgram(dropVs, dropFs);
+
+          this.vao = gl.createVertexArray();
+          gl.bindVertexArray(this.vao);
+          const vbo = gl.createBuffer();
+          gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+          gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
+          gl.enableVertexAttribArray(0);
+          gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+          const ebo = gl.createBuffer();
+          gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+          gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(idx), gl.STATIC_DRAW);
+          gl.bindVertexArray(null);
+
+          this.dropVao = gl.createVertexArray();
+          this.dropBuffer = gl.createBuffer();
+          gl.bindVertexArray(this.dropVao);
+          gl.bindBuffer(gl.ARRAY_BUFFER, this.dropBuffer);
+          gl.bufferData(gl.ARRAY_BUFFER, this.drops.maxDrops * 5 * 4, gl.DYNAMIC_DRAW);
+          gl.enableVertexAttribArray(0);
+          gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 20, 0);
+          gl.enableVertexAttribArray(1);
+          gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 20, 12);
+          gl.enableVertexAttribArray(2);
+          gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 20, 16);
+          gl.bindVertexArray(null);
+        }
+
+        mat4Perspective(fov, aspect, near, far) {
+          const f = 1 / Math.tan(fov / 2);
+          const nf = 1 / (near - far);
+          return [
+            f / aspect, 0, 0, 0,
+            0, f, 0, 0,
+            0, 0, (far + near) * nf, -1,
+            0, 0, (2 * far * near) * nf, 0
+          ];
+        }
+
+        mat4LookAt(eye, center, up) {
+          const zx = eye[0] - center[0], zy = eye[1] - center[1], zz = eye[2] - center[2];
+          let zlen = Math.hypot(zx, zy, zz) || 1;
+          const z0 = zx / zlen, z1 = zy / zlen, z2 = zz / zlen;
+          const xx = up[1] * z2 - up[2] * z1;
+          const xy = up[2] * z0 - up[0] * z2;
+          const xz = up[0] * z1 - up[1] * z0;
+          let xlen = Math.hypot(xx, xy, xz) || 1;
+          const x0 = xx / xlen, x1 = xy / xlen, x2 = xz / xlen;
+          const y0 = z1 * x2 - z2 * x1;
+          const y1 = z2 * x0 - z0 * x2;
+          const y2 = z0 * x1 - z1 * x0;
+          return [
+            x0, y0, z0, 0,
+            x1, y1, z1, 0,
+            x2, y2, z2, 0,
+            -(x0 * eye[0] + x1 * eye[1] + x2 * eye[2]),
+            -(y0 * eye[0] + y1 * eye[1] + y2 * eye[2]),
+            -(z0 * eye[0] + z1 * eye[1] + z2 * eye[2]),
+            1
+          ];
+        }
+
+        mat4Mul(a, b) {
+          const o = new Array(16).fill(0);
+          for (let r = 0; r < 4; r++) {
+            for (let c = 0; c < 4; c++) {
+              o[c + r * 4] =
+                a[r * 4] * b[c] +
+                a[r * 4 + 1] * b[c + 4] +
+                a[r * 4 + 2] * b[c + 8] +
+                a[r * 4 + 3] * b[c + 12];
+            }
+          }
+          return o;
+        }
+
+        resize() {
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          const w = Math.floor(this.canvas.clientWidth * dpr);
+          const h = Math.floor(this.canvas.clientHeight * dpr);
+          if (this.canvas.width !== w || this.canvas.height !== h) {
+            this.canvas.width = w;
+            this.canvas.height = h;
+          }
+        }
+
+        render(dt) {
+          this.time += dt;
+          this.resize();
+          const gl = this.gl;
+          gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+          gl.enable(gl.DEPTH_TEST);
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+          gl.clearColor(0.03, 0.06, 0.11, 1);
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+          gl.bindTexture(gl.TEXTURE_2D, this.heightTex);
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.sim.size, this.sim.size, gl.RED, gl.FLOAT, this.sim.height);
+
+          const aspect = this.canvas.width / Math.max(1, this.canvas.height);
+          const eye = [Math.sin(this.time * 0.08) * 2.6, 3.25, 7.4];
+          const center = [0, 0.0, 0];
+          const proj = this.mat4Perspective(Math.PI / 4.6, aspect, 0.05, 60);
+          const view = this.mat4LookAt(eye, center, [0, 1, 0]);
+          const mvp = this.mat4Mul(view, proj);
+
+          gl.useProgram(this.program);
+          gl.uniform1i(gl.getUniformLocation(this.program, 'uHeight'), 0);
+          gl.uniform1f(gl.getUniformLocation(this.program, 'uExtent'), this.sim.extent);
+          gl.uniform1f(gl.getUniformLocation(this.program, 'uTexel'), 1 / (this.sim.size - 1));
+          gl.uniform3fv(gl.getUniformLocation(this.program, 'uCamPos'), eye);
+          gl.uniform3fv(gl.getUniformLocation(this.program, 'uLightDir'), this.lightDir);
+          gl.uniformMatrix4fv(gl.getUniformLocation(this.program, 'uMVP'), false, new Float32Array(mvp));
+          gl.bindVertexArray(this.vao);
+          gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_INT, 0);
+
+          const max = this.drops.maxDrops;
+          const arr = new Float32Array(max * 5);
+          let c = 0;
+          for (const d of this.drops.drops) {
+            if (c >= max) break;
+            arr[c * 5] = d.x;
+            arr[c * 5 + 1] = d.y;
+            arr[c * 5 + 2] = d.z;
+            arr[c * 5 + 3] = d.radius;
+            arr[c * 5 + 4] = d.flatten;
+            c++;
+          }
+          gl.bindBuffer(gl.ARRAY_BUFFER, this.dropBuffer);
+          gl.bufferSubData(gl.ARRAY_BUFFER, 0, arr, 0, c * 5);
+
+          gl.useProgram(this.dropProgram);
+          gl.uniformMatrix4fv(gl.getUniformLocation(this.dropProgram, 'uMVP'), false, new Float32Array(mvp));
+          gl.uniform3fv(gl.getUniformLocation(this.dropProgram, 'uLightDir'), this.lightDir);
+          gl.bindVertexArray(this.dropVao);
+          gl.drawArrays(gl.POINTS, 0, c);
+          gl.bindVertexArray(null);
+        }
+      }
+
+      class CanvasFallback {
+        constructor(canvas, sim, drops) {
+          this.canvas = canvas;
+          this.ctx = canvas.getContext('2d');
+          this.sim = sim;
+          this.drops = drops;
+        }
+        resize() {
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          const w = Math.floor(this.canvas.clientWidth * dpr);
+          const h = Math.floor(this.canvas.clientHeight * dpr);
+          if (this.canvas.width !== w || this.canvas.height !== h) {
+            this.canvas.width = w;
+            this.canvas.height = h;
+          }
+        }
+        render() {
+          this.resize();
+          const ctx = this.ctx;
+          const w = this.canvas.width, h = this.canvas.height;
+          ctx.fillStyle = '#081225';
+          ctx.fillRect(0, 0, w, h);
+          ctx.save();
+          ctx.translate(w * 0.5, h * 0.62);
+          const scale = Math.min(w, h) * 0.065;
+          ctx.scale(scale, scale * 0.35);
+          const g = ctx.createLinearGradient(0, -10, 0, 10);
+          g.addColorStop(0, '#4f89d8');
+          g.addColorStop(1, '#0f2236');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.rect(-this.sim.extent, -this.sim.extent, this.sim.extent * 2, this.sim.extent * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = 'rgba(180,220,255,0.5)';
+          for (let j = 2; j < this.sim.size - 2; j += 3) {
+            ctx.beginPath();
+            for (let i = 0; i < this.sim.size; i++) {
+              const x = (i / (this.sim.size - 1) - 0.5) * this.sim.extent * 2;
+              const z = (j / (this.sim.size - 1) - 0.5) * this.sim.extent * 2;
+              const y = this.sim.sampleHeightWorld(x, z) * 3.5;
+              if (i === 0) ctx.moveTo(x, z + y);
+              else ctx.lineTo(x, z + y);
+            }
+            ctx.stroke();
+          }
+          ctx.restore();
+
+          for (const d of this.drops.drops) {
+            const sx = w * 0.5 + d.x * Math.min(w, h) * 0.06;
+            const sy = h * 0.35 - d.y * Math.min(w, h) * 0.1 + d.z * Math.min(w, h) * 0.02;
+            const rr = d.radius * Math.min(w, h) * 0.12;
+            const grad = ctx.createRadialGradient(sx - rr * 0.3, sy - rr * 0.4, rr * 0.2, sx, sy, rr);
+            grad.addColorStop(0, 'rgba(240,250,255,0.95)');
+            grad.addColorStop(1, 'rgba(80,145,220,0.4)');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.ellipse(sx, sy, rr * (1 + d.flatten), rr * (1 - d.flatten * 0.45), 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+
+      const canvas = document.getElementById('simCanvas');
+      const hud = document.getElementById('hud');
+      const sim = new HeightFieldSimulation(160, 6.0);
+      const drops = new DropSystem(sim);
+
+      let renderer;
+      try {
+        renderer = new WebGLRenderer(canvas, sim, drops);
+      } catch (err) {
+        renderer = new CanvasFallback(canvas, sim, drops);
+        hud.textContent = 'WebGL2 unavailable; running high-quality 2D fallback. Click/tap to spawn drops.';
+      }
+
+      let pointerX = 0;
+      let pointerY = 0;
+      let lastTime = performance.now();
+      const fixedDt = 1 / 120;
+      let acc = 0;
+
+      function spawnAtClient(clientX, clientY) {
+        const rect = canvas.getBoundingClientRect();
+        const nx = ((clientX - rect.left) / rect.width) * 2 - 1;
+        const nz = ((clientY - rect.top) / rect.height) * 2 - 1;
+        const x = nx * sim.extent * 0.95;
+        const z = nz * sim.extent * 0.95;
+        drops.spawn(x, z, 5 + Math.floor(Math.random() * 4), 0.25 + Math.random() * 0.15, 3.2, -0.4);
+      }
+
+      window.addEventListener('pointerdown', (e) => {
+        spawnAtClient(e.clientX, e.clientY);
+      }, { passive: true });
+
+      window.addEventListener('pointermove', (e) => {
+        pointerX = (e.clientX / Math.max(1, window.innerWidth)) * 2 - 1;
+        pointerY = (e.clientY / Math.max(1, window.innerHeight)) * 2 - 1;
+        if (renderer.lightDir) {
+          const lx = pointerX * 0.8;
+          const ly = 0.7 - pointerY * 0.4;
+          const lz = 0.45;
+          const len = Math.hypot(lx, ly, lz) || 1;
+          renderer.lightDir = [lx / len, ly / len, lz / len];
+        }
+      }, { passive: true });
+
+      window.addEventListener('resize', () => renderer.resize && renderer.resize(), { passive: true });
+
+      for (let i = 0; i < 5; i++) {
+        const a = i / 5 * Math.PI * 2;
+        drops.spawn(Math.cos(a) * 1.1, Math.sin(a) * 1.1, 3, 0.08, 2.8, -0.35);
+      }
+
+      function tick(now) {
+        let dt = (now - lastTime) / 1000;
+        lastTime = now;
+        dt = clamp(dt, 0, 0.05);
+        acc += dt;
+
+        while (acc >= fixedDt) {
+          sim.step(fixedDt);
+          drops.step(fixedDt);
+          acc -= fixedDt;
+        }
+
+        renderer.render(dt);
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    })();
+  </script>
+</body>
+</html>

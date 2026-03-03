@@ -1,74 +1,257 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Water Drop Simulation</title>
-    <style>
-        body { margin: 0; }
-        canvas { display: block; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Water Drop Falling Simulation</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: radial-gradient(circle at 20% 20%, #153664 0%, #07162d 45%, #030a16 100%);
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: crosshair;
+    }
+
+    .hud {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 2;
+      background: rgba(4, 12, 25, 0.65);
+      border: 1px solid rgba(117, 192, 255, 0.35);
+      border-radius: 12px;
+      padding: 10px 12px;
+      color: #d6ebff;
+      backdrop-filter: blur(4px);
+      font-size: 13px;
+      line-height: 1.4;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.25);
+      user-select: none;
+    }
+
+    .hud strong {
+      color: #8dd7ff;
+    }
+  </style>
 </head>
 <body>
-<canvas id="canvas"></canvas>
-<script>
-const canvas = document.getElementById('canvas');
-const gl = canvas.getContext('webgl2');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+  <canvas id="canvas"></canvas>
+  <div class="hud">
+    <div><strong>Water Drop Simulation</strong></div>
+    <div>Click / tap: spawn a burst</div>
+    <div>Press <strong>Space</strong>: pause or resume</div>
+  </div>
 
-let drops = [];
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
 
-class Drop {
-    constructor(x, y) {
+    const drops = [];
+    const ripples = [];
+
+    const config = {
+      gravity: 0.16,
+      wind: 0.02,
+      floorBounciness: 0.46,
+      airResistance: 0.998,
+      maxDrops: 700,
+      autoSpawnChance: 0.72,
+      splashCount: 4,
+    };
+
+    let paused = false;
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    class Drop {
+      constructor(x, y, size = Math.random() * 2 + 1.8) {
         this.x = x;
         this.y = y;
-        this.radius = 5;
-        this.velocityY = 0;
-        this.bounceFactor = 0.7;
-    }
+        this.radius = size;
+        this.vx = (Math.random() - 0.5) * 0.7;
+        this.vy = Math.random() * 2 + 1;
+        this.life = 1;
+        this.color = `hsla(${200 + Math.random() * 20}, 90%, 68%, 1)`;
+      }
 
-    update() {
-        this.velocityY += 0.1; // gravity
-        this.y += this.velocityY;
+      update() {
+        this.vx += (Math.random() - 0.5) * config.wind * 0.06;
+        this.vy += config.gravity;
 
-        if (this.y + this.radius > canvas.height) {
-            this.y = canvas.height - this.radius;
-            this.velocityY *= -this.bounceFactor; // bounce back
+        this.vx *= config.airResistance;
+        this.vy *= config.airResistance;
+
+        this.x += this.vx;
+        this.y += this.vy;
+
+        if (this.y + this.radius >= canvas.height) {
+          this.y = canvas.height - this.radius;
+          if (Math.abs(this.vy) > 1.4) {
+            spawnRipple(this.x, canvas.height - 2, this.radius * 2.5);
+            spawnSplash(this.x, canvas.height - this.radius, this.radius);
+          }
+
+          this.vy *= -config.floorBounciness;
+          this.vx *= 0.92;
+          this.radius *= 0.94;
+
+          if (this.radius < 0.9 || Math.abs(this.vy) < 0.2) {
+            this.life -= 0.08;
+          }
         }
+
+        if (this.x < -5 || this.x > canvas.width + 5) {
+          this.life = 0;
+        }
+
+        if (this.y < -20 || this.y > canvas.height + 20) {
+          this.life = 0;
+        }
+      }
+
+      draw() {
+        const gradient = ctx.createRadialGradient(
+          this.x - this.radius * 0.4,
+          this.y - this.radius * 0.4,
+          this.radius * 0.1,
+          this.x,
+          this.y,
+          this.radius * 1.2
+        );
+        gradient.addColorStop(0, 'rgba(230, 250, 255, 0.95)');
+        gradient.addColorStop(1, this.color.replace(', 1)', ', 0.16)'));
+
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.ellipse(this.x, this.y, this.radius * 0.85, this.radius * 1.1, this.vx * 0.08, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      get dead() {
+        return this.life <= 0;
+      }
     }
 
-    draw() {
-        const shaderProgram = createShaderProgram();
-        gl.useProgram(shaderProgram);
-        // Render drop here with WebGL (implement rendering logic)
+    class Ripple {
+      constructor(x, y, startRadius) {
+        this.x = x;
+        this.y = y;
+        this.radius = startRadius;
+        this.alpha = 0.45;
+        this.growth = 1.8 + Math.random() * 1.4;
+      }
+
+      update() {
+        this.radius += this.growth;
+        this.alpha *= 0.94;
+      }
+
+      draw() {
+        ctx.strokeStyle = `rgba(125, 206, 255, ${this.alpha})`;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.ellipse(this.x, this.y, this.radius * 1.8, this.radius * 0.55, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      get dead() {
+        return this.alpha < 0.03;
+      }
     }
-}
 
-function createShaderProgram() {
-    // Shader creation logic here
-    return null; // placeholder
-}
+    function spawnRipple(x, y, size) {
+      ripples.push(new Ripple(x, y, Math.max(2, size)));
+    }
 
-function render() {
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    function spawnDropBurst(x, y, count = 16) {
+      for (let i = 0; i < count; i += 1) {
+        if (drops.length >= config.maxDrops) return;
+        const drop = new Drop(x + (Math.random() - 0.5) * 55, y + (Math.random() - 0.5) * 10, Math.random() * 2.8 + 1.5);
+        drop.vx = (Math.random() - 0.5) * 2.2;
+        drop.vy = Math.random() * 1.2 + 0.6;
+        drops.push(drop);
+      }
+    }
 
-    drops.forEach(drop => {
-        drop.update();
-        drop.draw();
+    function spawnSplash(x, y, sourceRadius) {
+      for (let i = 0; i < config.splashCount; i += 1) {
+        if (drops.length >= config.maxDrops) return;
+        const splash = new Drop(x, y, Math.max(1, sourceRadius * 0.52));
+        splash.vx = (Math.random() - 0.5) * 2.8;
+        splash.vy = -Math.random() * 2.4 - 0.8;
+        splash.life = 0.9;
+        drops.push(splash);
+      }
+    }
+
+    function animate() {
+      if (!paused) {
+        const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        sky.addColorStop(0, '#0d2a4f');
+        sky.addColorStop(0.52, '#0b2241');
+        sky.addColorStop(1, '#041024');
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        if (Math.random() < config.autoSpawnChance) {
+          const x = Math.random() * canvas.width;
+          drops.push(new Drop(x, -10, Math.random() * 2.4 + 1.8));
+        }
+
+        for (let i = drops.length - 1; i >= 0; i -= 1) {
+          const drop = drops[i];
+          drop.update();
+          drop.draw();
+          if (drop.dead) drops.splice(i, 1);
+        }
+
+        for (let i = ripples.length - 1; i >= 0; i -= 1) {
+          const ripple = ripples[i];
+          ripple.update();
+          ripple.draw();
+          if (ripple.dead) ripples.splice(i, 1);
+        }
+
+        ctx.fillStyle = 'rgba(167, 214, 255, 0.85)';
+        ctx.font = '13px Inter, sans-serif';
+        ctx.fillText(`drops: ${drops.length}`, 16, canvas.height - 18);
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    window.addEventListener('resize', resize);
+    canvas.addEventListener('pointerdown', (event) => {
+      spawnDropBurst(event.clientX, event.clientY, 24);
     });
 
-    requestAnimationFrame(render);
-}
+    window.addEventListener('keydown', (event) => {
+      if (event.code === 'Space') {
+        paused = !paused;
+      }
+    });
 
-canvas.addEventListener('click', (event) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    drops.push(new Drop(x, y));
-});
-
-render();
-</script>
+    resize();
+    spawnDropBurst(window.innerWidth / 2, 30, 36);
+    animate();
+  </script>
 </body>
 </html>

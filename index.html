@@ -3,400 +3,729 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Professional To-Do List</title>
+  <meta name="theme-color" content="#111827" />
+  <title>FocusFlow — Pomodoro Timer</title>
   <style>
     :root {
-      --bg: #f3f5fb;
-      --surface: #ffffff;
-      --surface-muted: #f8f9ff;
-      --text: #1b2335;
-      --subtext: #667089;
-      --primary: #4f46e5;
-      --primary-hover: #4338ca;
-      --success: #059669;
-      --danger: #dc2626;
-      --border: #e5e7ef;
-      --shadow: 0 12px 30px rgba(22, 28, 45, 0.08);
-      --radius: 14px;
+      --bg: #0b1020;
+      --panel: #121a2b;
+      --panel-2: #182238;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #7c3aed;
+      --accent-2: #a78bfa;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --border: rgba(255,255,255,.09);
+      --shadow: 0 22px 70px rgba(0,0,0,.35);
+      --radius: 24px;
     }
 
     * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      color: var(--text);
-      background: radial-gradient(circle at top right, #e7e9ff 0%, transparent 32%), var(--bg);
       min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 10%, rgba(124,58,237,.25), transparent 30%),
+        radial-gradient(circle at 85% 90%, rgba(167,139,250,.12), transparent 28%),
+        var(--bg);
       display: grid;
       place-items: center;
-      padding: 24px;
+      padding: 20px;
     }
 
     .app {
-      width: min(900px, 100%);
-      background: var(--surface);
+      width: min(980px, 100%);
+      background: rgba(18,26,43,.88);
+      backdrop-filter: blur(18px);
       border: 1px solid var(--border);
-      border-radius: 18px;
+      border-radius: 30px;
       box-shadow: var(--shadow);
       overflow: hidden;
     }
 
-    .header {
-      padding: 24px;
-      border-bottom: 1px solid var(--border);
+    header {
+      padding: 24px 26px 18px;
       display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      justify-content: space-between;
-      align-items: baseline;
-      background: linear-gradient(180deg, #ffffff 0%, #fbfbff 100%);
-    }
-
-    .header h1 {
-      margin: 0;
-      font-size: clamp(1.5rem, 1.2rem + 1vw, 2rem);
-      letter-spacing: -0.03em;
-    }
-
-    .header p {
-      margin: 0;
-      color: var(--subtext);
-      font-size: 0.95rem;
-    }
-
-    .content {
-      padding: 20px;
-      display: grid;
-      gap: 14px;
-    }
-
-    .panel {
-      background: var(--surface-muted);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 14px;
-    }
-
-    .task-form {
-      display: grid;
-      grid-template-columns: 1fr 140px 170px auto;
-      gap: 10px;
-    }
-
-    input, select, button {
-      font: inherit;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      padding: 10px 12px;
-      background: #fff;
-      color: var(--text);
-    }
-
-    input:focus, select:focus {
-      outline: 2px solid rgba(79, 70, 229, 0.25);
-      border-color: var(--primary);
-    }
-
-    button {
-      cursor: pointer;
-      transition: 0.2s ease;
-    }
-
-    .btn-primary {
-      background: var(--primary);
-      color: #fff;
-      border-color: var(--primary);
-      font-weight: 600;
-    }
-
-    .btn-primary:hover { background: var(--primary-hover); }
-
-    .toolbar {
-      display: grid;
-      grid-template-columns: 1fr auto auto;
-      gap: 10px;
       align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 1px solid var(--border);
     }
 
-    .filters {
-      display: inline-flex;
+    h1 {
+      margin: 0;
+      font-size: clamp(1.25rem, 1rem + 1vw, 1.7rem);
+      letter-spacing: -.03em;
+    }
+
+    .subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: .92rem;
+    }
+
+    .clock-badge {
+      padding: 8px 12px;
       border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;
-      background: #fff;
-    }
-
-    .filters button {
-      border: 0;
-      border-right: 1px solid var(--border);
-      background: transparent;
-      padding: 9px 14px;
-      color: var(--subtext);
-    }
-
-    .filters button:last-child { border-right: 0; }
-    .filters button.active {
-      background: #ecebff;
-      color: #302c9b;
-      font-weight: 600;
-    }
-
-    .stats {
-      color: var(--subtext);
-      font-size: 0.92rem;
+      background: var(--panel-2);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: .82rem;
       white-space: nowrap;
     }
 
-    .task-list {
-      list-style: none;
-      margin: 0;
-      padding: 0;
+    .content {
       display: grid;
-      gap: 10px;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 18px;
+      padding: 20px;
     }
 
-    .task-item {
-      background: #fff;
+    .card {
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px;
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      gap: 10px;
-      align-items: start;
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.03);
+      padding: 20px;
     }
 
-    .task-item.completed .task-title {
-      text-decoration: line-through;
-      color: #8a92a5;
-    }
-
-    .task-title {
-      margin: 0;
-      font-weight: 600;
-      line-height: 1.3;
-    }
-
-    .meta {
-      margin-top: 4px;
-      font-size: 0.82rem;
-      color: var(--subtext);
+    .timer-card {
+      min-height: 560px;
       display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .badge {
-      border-radius: 999px;
-      padding: 2px 8px;
-      font-weight: 600;
-      font-size: 0.75rem;
-      display: inline-block;
-      border: 1px solid transparent;
-    }
-
-    .priority-low { background: #ecfdf3; color: #047857; border-color: #a7f3d0; }
-    .priority-medium { background: #fff7ed; color: #b45309; border-color: #fed7aa; }
-    .priority-high { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
-
-    .actions {
-      display: flex;
-      gap: 8px;
-    }
-
-    .icon-btn {
-      border: 1px solid var(--border);
-      background: #fff;
-      padding: 6px 9px;
-      color: var(--subtext);
-    }
-
-    .icon-btn:hover { color: var(--text); }
-    .icon-btn.delete:hover { color: var(--danger); border-color: #fecaca; background: #fef2f2; }
-
-    .empty {
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       text-align: center;
-      color: var(--subtext);
-      padding: 26px;
-      border: 1px dashed #c7ccdc;
-      border-radius: 12px;
-      background: #fff;
     }
 
-    @media (max-width: 740px) {
-      .task-form { grid-template-columns: 1fr 1fr; }
-      .task-form button { grid-column: span 2; }
-      .toolbar { grid-template-columns: 1fr; }
-      .stats { order: 3; }
+    .mode {
+      display: inline-flex;
+      gap: 6px;
+      padding: 5px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      margin-bottom: 24px;
+    }
+
+    .mode button,
+    .ghost-btn,
+    .primary-btn,
+    .icon-btn {
+      font: inherit;
+      border: 0;
+      cursor: pointer;
+    }
+
+    .mode button {
+      color: var(--muted);
+      background: transparent;
+      border-radius: 999px;
+      padding: 9px 14px;
+      transition: .18s ease;
+    }
+
+    .mode button.active {
+      background: var(--accent);
+      color: white;
+      box-shadow: 0 8px 20px rgba(124,58,237,.35);
+    }
+
+    .ring {
+      width: min(340px, 72vw);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      position: relative;
+      background: conic-gradient(var(--accent) 0deg, rgba(255,255,255,.08) 0deg);
+      transition: background .25s linear;
+    }
+
+    .ring::before {
+      content: "";
+      position: absolute;
+      inset: 12px;
+      border-radius: 50%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+    }
+
+    .timer-inner {
+      position: relative;
+      z-index: 1;
+    }
+
+    .timer {
+      font-variant-numeric: tabular-nums;
+      font-size: clamp(4rem, 12vw, 7rem);
+      font-weight: 700;
+      letter-spacing: -.06em;
+      line-height: 1;
+    }
+
+    .phase-label {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: .95rem;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-top: 28px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .primary-btn {
+      background: var(--accent);
+      color: white;
+      padding: 12px 22px;
+      border-radius: 13px;
+      font-weight: 700;
+      min-width: 130px;
+      box-shadow: 0 12px 28px rgba(124,58,237,.3);
+    }
+
+    .primary-btn:hover { filter: brightness(1.07); }
+
+    .ghost-btn {
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 12px 16px;
+      border-radius: 13px;
+    }
+
+    .progress-text {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .side {
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+
+    .section-title {
+      margin: 0 0 14px;
+      font-size: 1rem;
+      letter-spacing: -.02em;
+    }
+
+    .settings {
+      display: grid;
+      gap: 12px;
+    }
+
+    label {
+      display: grid;
+      gap: 7px;
+      color: var(--muted);
+      font-size: .86rem;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      padding: 11px 12px;
+      color: var(--text);
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      outline: none;
+    }
+
+    input[type="number"]:focus { border-color: rgba(167,139,250,.7); }
+
+    .toggle {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      padding-top: 4px;
+    }
+
+    .toggle span {
+      color: var(--text);
+      font-size: .92rem;
+    }
+
+    .switch {
+      position: relative;
+      width: 48px;
+      height: 28px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      inset: 0;
+      cursor: pointer;
+      background: #334155;
+      border-radius: 999px;
+      transition: .2s;
+    }
+
+    .slider::before {
+      content: "";
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      left: 3px;
+      top: 3px;
+      border-radius: 50%;
+      background: white;
+      transition: .2s;
+    }
+
+    .switch input:checked + .slider { background: var(--accent); }
+    .switch input:checked + .slider::before { transform: translateX(20px); }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .stat {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 13px;
+      text-align: center;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 1.35rem;
+      margin-bottom: 3px;
+    }
+
+    .stat span {
+      color: var(--muted);
+      font-size: .74rem;
+    }
+
+    .sessions {
+      display: grid;
+      gap: 10px;
+      max-height: 240px;
+      overflow: auto;
+    }
+
+    .session {
+      padding: 11px 12px;
+      border-radius: 12px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: .83rem;
+    }
+
+    .session b { color: var(--text); }
+
+    .tip {
+      color: var(--muted);
+      font-size: .82rem;
+      line-height: 1.55;
+      margin: 0;
+    }
+
+    footer {
+      padding: 0 24px 24px;
+      color: var(--muted);
+      text-align: center;
+      font-size: .76rem;
+    }
+
+    @media (max-width: 760px) {
+      .content { grid-template-columns: 1fr; }
+      .timer-card { min-height: auto; padding: 18px; }
+      header { align-items: flex-start; }
+      .clock-badge { display: none; }
     }
   </style>
 </head>
 <body>
-  <main class="app" aria-label="To-do list app">
-    <header class="header">
-      <h1>TaskFlow Pro</h1>
-      <p>Organize your priorities and get things done.</p>
+  <main class="app">
+    <header>
+      <div>
+        <h1>FocusFlow 🍅</h1>
+        <p class="subtitle">A simple Pomodoro timer for focused study.</p>
+      </div>
+      <div class="clock-badge" id="wallClock">--:--</div>
     </header>
 
     <section class="content">
-      <form id="taskForm" class="panel task-form" autocomplete="off">
-        <input id="taskInput" type="text" placeholder="What needs to be done?" required maxlength="140" />
-        <select id="priorityInput" aria-label="Task priority">
-          <option value="low">Low priority</option>
-          <option value="medium" selected>Medium priority</option>
-          <option value="high">High priority</option>
-        </select>
-        <input id="dueDateInput" type="date" aria-label="Due date" />
-        <button class="btn-primary" type="submit">Add Task</button>
-      </form>
-
-      <div class="panel toolbar">
-        <input id="searchInput" type="search" placeholder="Search tasks..." aria-label="Search tasks" />
-        <div class="filters" role="tablist" aria-label="Task filters">
-          <button type="button" class="active" data-filter="all">All</button>
-          <button type="button" data-filter="active">Active</button>
-          <button type="button" data-filter="completed">Completed</button>
+      <div class="card timer-card">
+        <div class="mode">
+          <button type="button" data-mode="focus" class="active">Focus</button>
+          <button type="button" data-mode="short">Short break</button>
+          <button type="button" data-mode="long">Long break</button>
         </div>
-        <button id="clearCompletedBtn" type="button">Clear Completed</button>
+
+        <div class="ring" id="ring">
+          <div class="timer-inner">
+            <div class="timer" id="timer">25:00</div>
+            <div class="phase-label" id="phaseLabel">Focus session</div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button class="primary-btn" id="startPauseBtn" type="button">Start</button>
+          <button class="ghost-btn" id="resetBtn" type="button">Reset</button>
+          <button class="ghost-btn" id="skipBtn" type="button">Skip</button>
+        </div>
+
+        <div class="progress-text" id="progressText">Session 1 of 4</div>
       </div>
 
-      <div class="panel">
-        <div class="stats" id="stats"></div>
-        <ul class="task-list" id="taskList"></ul>
-      </div>
+      <aside class="side">
+        <div class="card">
+          <h2 class="section-title">Today's progress</h2>
+          <div class="stats">
+            <div class="stat"><strong id="focusCount">0</strong><span>focus sessions</span></div>
+            <div class="stat"><strong id="focusMinutes">0</strong><span>focus minutes</span></div>
+            <div class="stat"><strong id="streakCount">0</strong><span>current streak</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="section-title">Timer settings</h2>
+          <div class="settings">
+            <label>Focus (minutes)
+              <input id="focusInput" type="number" min="1" max="120" value="25" />
+            </label>
+            <label>Short break (minutes)
+              <input id="shortInput" type="number" min="1" max="30" value="5" />
+            </label>
+            <label>Long break (minutes)
+              <input id="longInput" type="number" min="1" max="60" value="15" />
+            </label>
+            <label class="toggle">
+              <span>Auto-start next session</span>
+              <span class="switch">
+                <input id="autoStart" type="checkbox" />
+                <span class="slider"></span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="section-title">Recent sessions</h2>
+          <div class="sessions" id="sessions"></div>
+          <p class="tip" id="emptySessions">Complete a focus session and it will appear here.</p>
+        </div>
+      </aside>
     </section>
+
+    <footer>Tip: use headphones or Do Not Disturb for a distraction-free study block.</footer>
   </main>
 
   <script>
-    const state = {
-      tasks: JSON.parse(localStorage.getItem('taskflow.tasks') || '[]'),
-      filter: 'all',
-      search: ''
+    const STORAGE_KEY = "focusflow.state.v1";
+
+    const defaultState = {
+      mode: "focus",
+      focusMinutes: 25,
+      shortMinutes: 5,
+      longMinutes: 15,
+      remainingSeconds: 1500,
+      running: false,
+      sessionNumber: 1,
+      completedFocus: 0,
+      focusMinutesDone: 0,
+      streak: 0,
+      sessions: [],
+      autoStart: false,
+      lastDate: new Date().toISOString().slice(0, 10)
     };
 
-    const els = {
-      form: document.getElementById('taskForm'),
-      taskInput: document.getElementById('taskInput'),
-      priorityInput: document.getElementById('priorityInput'),
-      dueDateInput: document.getElementById('dueDateInput'),
-      searchInput: document.getElementById('searchInput'),
-      taskList: document.getElementById('taskList'),
-      stats: document.getElementById('stats'),
-      clearCompletedBtn: document.getElementById('clearCompletedBtn'),
-      filters: [...document.querySelectorAll('.filters button')]
-    };
+    let state = loadState();
+    let timerId = null;
 
-    const saveTasks = () => {
-      localStorage.setItem('taskflow.tasks', JSON.stringify(state.tasks));
-    };
+    const $ = (id) => document.getElementById(id);
+    const timerEl = $("timer");
+    const phaseLabelEl = $("phaseLabel");
+    const progressTextEl = $("progressText");
+    const startPauseBtn = $("startPauseBtn");
+    const ring = $("ring");
 
-    const formatDate = (dateString) => {
-      if (!dateString) return 'No due date';
-      const date = new Date(`${dateString}T00:00:00`);
-      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-    };
+    function loadState() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+        return { ...defaultState, ...(saved || {}) };
+      } catch {
+        return { ...defaultState };
+      }
+    }
 
-    const getFilteredTasks = () => {
-      const query = state.search.trim().toLowerCase();
-      return state.tasks.filter((task) => {
-        const matchesFilter =
-          state.filter === 'all' ||
-          (state.filter === 'active' && !task.completed) ||
-          (state.filter === 'completed' && task.completed);
-        const matchesSearch = task.title.toLowerCase().includes(query);
-        return matchesFilter && matchesSearch;
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function todayKey() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function refreshDailyState() {
+      const today = todayKey();
+      if (state.lastDate !== today) {
+        state.completedFocus = 0;
+        state.focusMinutesDone = 0;
+        state.streak = 0;
+        state.sessions = [];
+        state.sessionNumber = 1;
+        state.lastDate = today;
+        state.mode = "focus";
+        state.remainingSeconds = state.focusMinutes * 60;
+        state.running = false;
+        clearTimer();
+      }
+    }
+
+    function modeDuration() {
+      if (state.mode === "focus") return state.focusMinutes * 60;
+      if (state.mode === "short") return state.shortMinutes * 60;
+      return state.longMinutes * 60;
+    }
+
+    function modeLabel() {
+      if (state.mode === "focus") return "Focus session";
+      if (state.mode === "short") return "Short break";
+      return "Long break";
+    }
+
+    function formatTime(seconds) {
+      const safe = Math.max(0, seconds);
+      const mm = Math.floor(safe / 60).toString().padStart(2, "0");
+      const ss = (safe % 60).toString().padStart(2, "0");
+      return mm + ":" + ss;
+    }
+
+    function render() {
+      refreshDailyState();
+      timerEl.textContent = formatTime(state.remainingSeconds);
+      phaseLabelEl.textContent = modeLabel();
+      startPauseBtn.textContent = state.running ? "Pause" : "Start";
+      progressTextEl.textContent = "Session " + state.sessionNumber + " of 4";
+
+      $("focusCount").textContent = state.completedFocus;
+      $("focusMinutes").textContent = state.focusMinutesDone;
+      $("streakCount").textContent = state.streak;
+
+      $("focusInput").value = state.focusMinutes;
+      $("shortInput").value = state.shortMinutes;
+      $("longInput").value = state.longMinutes;
+      $("autoStart").checked = !!state.autoStart;
+
+      document.querySelectorAll("[data-mode]").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.mode === state.mode);
       });
-    };
 
-    const render = () => {
-      const visibleTasks = getFilteredTasks();
-      const completedCount = state.tasks.filter((task) => task.completed).length;
-      const activeCount = state.tasks.length - completedCount;
+      const total = Math.max(1, modeDuration());
+      const progress = 1 - (state.remainingSeconds / total);
+      const degrees = Math.round(Math.max(0, Math.min(1, progress)) * 360);
+      ring.style.background = "conic-gradient(var(--accent) " + degrees + "deg, rgba(255,255,255,.08) " + degrees + "deg)";
 
-      els.stats.textContent = `${activeCount} active • ${completedCount} completed • ${state.tasks.length} total`;
-
-      els.taskList.innerHTML = visibleTasks.length
-        ? visibleTasks.map((task) => `
-            <li class="task-item ${task.completed ? 'completed' : ''}" data-id="${task.id}">
-              <input type="checkbox" ${task.completed ? 'checked' : ''} aria-label="Mark task complete" />
-              <div>
-                <p class="task-title">${task.title}</p>
-                <div class="meta">
-                  <span class="badge priority-${task.priority}">${task.priority} priority</span>
-                  <span>Due: ${formatDate(task.dueDate)}</span>
-                  <span>Created: ${formatDate(task.createdAt.slice(0, 10))}</span>
-                </div>
-              </div>
-              <div class="actions">
-                <button class="icon-btn delete" type="button" aria-label="Delete task">Delete</button>
-              </div>
-            </li>`).join('')
-        : '<li class="empty">No tasks found. Add your first task to get started.</li>';
-
-      els.filters.forEach((btn) => {
-        btn.classList.toggle('active', btn.dataset.filter === state.filter);
-      });
-    };
-
-    els.form.addEventListener('submit', (event) => {
-      event.preventDefault();
-      const title = els.taskInput.value.trim();
-      if (!title) return;
-
-      state.tasks.unshift({
-        id: crypto.randomUUID(),
-        title,
-        priority: els.priorityInput.value,
-        dueDate: els.dueDateInput.value,
-        completed: false,
-        createdAt: new Date().toISOString()
-      });
-
-      saveTasks();
-      els.form.reset();
-      els.priorityInput.value = 'medium';
-      els.taskInput.focus();
-      render();
-    });
-
-    els.searchInput.addEventListener('input', (event) => {
-      state.search = event.target.value;
-      render();
-    });
-
-    els.filters.forEach((button) => {
-      button.addEventListener('click', () => {
-        state.filter = button.dataset.filter;
-        render();
-      });
-    });
-
-    els.taskList.addEventListener('click', (event) => {
-      const row = event.target.closest('.task-item');
-      if (!row) return;
-      const task = state.tasks.find((item) => item.id === row.dataset.id);
-      if (!task) return;
-
-      if (event.target.matches('input[type="checkbox"]')) {
-        task.completed = event.target.checked;
-        saveTasks();
-        render();
+      const sessionsEl = $("sessions");
+      if (!state.sessions.length) {
+        sessionsEl.innerHTML = "";
+        $("emptySessions").style.display = "block";
+      } else {
+        $("emptySessions").style.display = "none";
+        sessionsEl.innerHTML = state.sessions.slice().reverse().slice(0, 12).map(s => {
+          return '<div class="session"><span><b>' + escapeHtml(s.type) + '</b> • ' + s.minutes + ' min</span><span>' + escapeHtml(s.time) + '</span></div>';
+        }).join("");
       }
 
-      if (event.target.matches('.delete')) {
-        state.tasks = state.tasks.filter((item) => item.id !== task.id);
-        saveTasks();
+      document.title = formatTime(state.remainingSeconds) + " • " + modeLabel();
+      saveState();
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, ch => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      }[ch]));
+    }
+
+    function clearTimer() {
+      if (timerId) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+    }
+
+    function startTimer() {
+      if (state.running) return;
+      state.running = true;
+      clearTimer();
+      timerId = setInterval(() => {
+        if (state.remainingSeconds <= 0) {
+          completeCurrentMode();
+          return;
+        }
+        state.remainingSeconds -= 1;
         render();
+      }, 1000);
+      render();
+    }
+
+    function pauseTimer() {
+      state.running = false;
+      clearTimer();
+      render();
+    }
+
+    function resetTimer() {
+      state.running = false;
+      clearTimer();
+      state.remainingSeconds = modeDuration();
+      render();
+    }
+
+    function switchMode(mode) {
+      state.running = false;
+      clearTimer();
+      state.mode = mode;
+      state.remainingSeconds = modeDuration();
+      render();
+    }
+
+    function completeCurrentMode() {
+      clearTimer();
+      state.running = false;
+
+      if (state.mode === "focus") {
+        const minutes = state.focusMinutes;
+        state.completedFocus += 1;
+        state.focusMinutesDone += minutes;
+        state.streak += 1;
+        state.sessions.push({
+          type: "Focus",
+          minutes,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        });
+
+        playBeep();
+        notify("Focus complete 🍅", "Nice work. Time for a break.");
+
+        const shouldLongBreak = state.sessionNumber % 4 === 0;
+        state.mode = shouldLongBreak ? "long" : "short";
+      } else {
+        state.mode = "focus";
+        if (state.mode === "focus" && state.sessionNumber < 4) state.sessionNumber += 1;
+        if (state.mode === "focus" && state.sessionNumber > 4) state.sessionNumber = 1;
+        playBeep();
+        notify("Break complete", "Ready for your next focus session?");
+      }
+
+      state.remainingSeconds = modeDuration();
+      render();
+
+      if (state.autoStart) {
+        startTimer();
+      }
+    }
+
+    function playBeep() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = 880;
+        gain.gain.value = 0.06;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.35);
+      } catch {}
+    }
+
+    async function notify(title, body) {
+      if (!("Notification" in window)) return;
+      if (Notification.permission === "default") {
+        try { await Notification.requestPermission(); } catch {}
+      }
+      if (Notification.permission === "granted") {
+        try { new Notification(title, { body }); } catch {}
+      }
+    }
+
+    startPauseBtn.addEventListener("click", async () => {
+      if (state.running) pauseTimer();
+      else {
+        await notify("FocusFlow is running", "Your focus session has started.");
+        startTimer();
       }
     });
 
-    els.clearCompletedBtn.addEventListener('click', () => {
-      state.tasks = state.tasks.filter((task) => !task.completed);
-      saveTasks();
+    $("resetBtn").addEventListener("click", resetTimer);
+    $("skipBtn").addEventListener("click", completeCurrentMode);
+
+    document.querySelectorAll("[data-mode]").forEach(btn => {
+      btn.addEventListener("click", () => switchMode(btn.dataset.mode));
+    });
+
+    $("focusInput").addEventListener("change", e => {
+      state.focusMinutes = clampNumber(e.target.value, 1, 120, 25);
+      if (!state.running && state.mode === "focus") state.remainingSeconds = state.focusMinutes * 60;
       render();
     });
 
+    $("shortInput").addEventListener("change", e => {
+      state.shortMinutes = clampNumber(e.target.value, 1, 30, 5);
+      if (!state.running && state.mode === "short") state.remainingSeconds = state.shortMinutes * 60;
+      render();
+    });
+
+    $("longInput").addEventListener("change", e => {
+      state.longMinutes = clampNumber(e.target.value, 1, 60, 15);
+      if (!state.running && state.mode === "long") state.remainingSeconds = state.longMinutes * 60;
+      render();
+    });
+
+    $("autoStart").addEventListener("change", e => {
+      state.autoStart = e.target.checked;
+      render();
+    });
+
+    function clampNumber(value, min, max, fallback) {
+      const n = Number(value);
+      return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : fallback;
+    }
+
+    setInterval(() => {
+      $("wallClock").textContent = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    }, 1000);
+
+    refreshDailyState();
+    $("wallClock").textContent = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
     render();
   </script>
 </body>

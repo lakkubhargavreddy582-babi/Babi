@@ -1,271 +1,42 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Water Drop Falling Simulation</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vortex Laboratory — Flow Field 07</title>
   <style>
-    :root {
-      --bg-top: #08162c;
-      --bg-bottom: #02070f;
-      --hud: rgba(8, 22, 44, 0.7);
-      --hud-border: rgba(165, 208, 255, 0.25);
-      --text: #d9efff;
-      --accent: #6ecbff;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      overflow: hidden;
-      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      color: var(--text);
-      background: linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
-    }
-
-    canvas {
-      display: block;
-      width: 100vw;
-      height: 100vh;
-    }
-
-    .hud {
-      position: fixed;
-      top: 12px;
-      left: 12px;
-      z-index: 10;
-      display: grid;
-      gap: 8px;
-      padding: 10px 12px;
-      border-radius: 10px;
-      background: var(--hud);
-      border: 1px solid var(--hud-border);
-      backdrop-filter: blur(8px);
-      font-size: 14px;
-      max-width: min(420px, calc(100vw - 24px));
-    }
-
-    .hud strong {
-      color: #fff;
-      font-size: 15px;
-    }
-
-    .hud code {
-      color: var(--accent);
-      background: rgba(110, 203, 255, 0.1);
-      padding: 1px 5px;
-      border-radius: 5px;
-    }
+    :root { --ice:#d9f5ff; --muted:#7194a6; --line:rgba(144,220,245,.19); --panel:rgba(7,18,27,.70); }
+    *{box-sizing:border-box} body{margin:0;overflow:hidden;background:#020609;color:var(--ice);font:11px/1.35 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.08em}
+    canvas{display:block;width:100vw;height:100vh} .topbar{position:fixed;inset:0 0 auto;display:flex;justify-content:space-between;align-items:flex-start;padding:24px 30px;pointer-events:none;z-index:2}
+    .eyebrow{color:#78d8fa;font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase}.title{margin:7px 0 0;font-size:18px;font-weight:500;letter-spacing:.05em}.title span{color:#78d8fa;font-weight:300}.run{display:flex;align-items:center;gap:8px;color:#93b4c2;font-size:9px;text-transform:uppercase}.pulse{width:7px;height:7px;border-radius:50%;background:#72e3c4;box-shadow:0 0 12px #72e3c4;animation:pulse 1.6s infinite}@keyframes pulse{50%{opacity:.35;transform:scale(.7)}}
+    .panel{position:fixed;z-index:2;border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(14px);box-shadow:0 12px 60px rgba(0,0,0,.28)}.metrics{left:30px;bottom:28px;width:236px;padding:15px 16px}.panel-head{color:#94bed0;font-size:9px;text-transform:uppercase;display:flex;justify-content:space-between;margin-bottom:13px}.panel-head b{font-weight:500;color:#e5f9ff}.metric{display:grid;grid-template-columns:1fr auto;gap:7px 12px;margin:8px 0;color:var(--muted)}.metric strong{font-size:10px;font-weight:500;color:#d8f7ff}.bar{grid-column:1/-1;height:2px;background:rgba(148,214,239,.12)}.bar i{display:block;height:100%;background:linear-gradient(90deg,#307d9c,#9ff4ff);box-shadow:0 0 8px #6eddf5}.readout{right:30px;bottom:28px;padding:13px 15px;color:#82a9b8;font-size:9px;text-transform:uppercase}.readout div+div{margin-top:5px}.readout b{color:#def9ff;font-weight:500}.legend{position:fixed;right:30px;top:92px;z-index:2;color:#85abb9;font-size:9px;text-align:right;text-transform:uppercase}.legend div{margin:7px 0;display:flex;justify-content:flex-end;align-items:center;gap:8px}.key{display:inline-block;width:18px;height:2px;background:#82e7ff}.key.v{background:#b3f7e8}.key.p{background:#e7a4ff}.hint{position:fixed;left:50%;bottom:31px;translate:-50%;color:#658795;font-size:9px;text-transform:uppercase;white-space:nowrap}.axis-label{position:fixed;right:31px;bottom:130px;color:#658795;font-size:9px;text-transform:uppercase}
+    @media(max-width:640px){.topbar{padding:18px}.metrics{left:18px;bottom:18px;width:202px}.readout,.legend{right:18px}.readout{bottom:18px}.legend{top:76px}.hint{display:none}.title{font-size:14px}.axis-label{right:18px;bottom:116px}}
   </style>
 </head>
 <body>
-  <div class="hud">
-    <strong>Water Drop Simulation</strong>
-    <div>Click or drag to spawn drops. Press <code>R</code> to toggle auto-rain, <code>C</code> to clear.</div>
-    <div id="stats"></div>
-  </div>
-  <canvas id="canvas"></canvas>
-
-  <script>
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    const statsEl = document.getElementById('stats');
-
-    const gravity = 0.12;
-    const airDrag = 0.997;
-    const maxDrops = 1200;
-    const splashDamping = 0.6;
-    const ripples = [];
-    const drops = [];
-
-    let autoRain = true;
-    let pointerDown = false;
-
-    function resizeCanvas() {
-      const ratio = window.devicePixelRatio || 1;
-      canvas.width = Math.floor(window.innerWidth * ratio);
-      canvas.height = Math.floor(window.innerHeight * ratio);
-      canvas.style.width = `${window.innerWidth}px`;
-      canvas.style.height = `${window.innerHeight}px`;
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    }
-
-    class Drop {
-      constructor(x, y, speedY = Math.random() * 2 + 1.5, speedX = (Math.random() - 0.5) * 0.4) {
-        this.x = x;
-        this.y = y;
-        this.vx = speedX;
-        this.vy = speedY;
-        this.radius = Math.random() * 2.3 + 1.7;
-        this.opacity = Math.random() * 0.25 + 0.65;
-      }
-
-      update(groundY) {
-        this.vy += gravity;
-        this.vx *= airDrag;
-        this.vy *= airDrag;
-
-        this.x += this.vx;
-        this.y += this.vy;
-
-        if (this.y + this.radius >= groundY) {
-          this.y = groundY - this.radius;
-
-          if (Math.abs(this.vy) > 1.2) {
-            ripples.push(new Ripple(this.x, groundY, Math.abs(this.vy) * 0.26));
-
-            const fragments = Math.min(4, Math.floor(Math.abs(this.vy) * 0.42));
-            for (let i = 0; i < fragments; i += 1) {
-              if (drops.length < maxDrops) {
-                drops.push(
-                  new Drop(
-                    this.x,
-                    groundY - 3,
-                    -Math.random() * 2.8 - 0.6,
-                    (Math.random() - 0.5) * 2.2
-                  )
-                );
-              }
-            }
-          }
-
-          this.vy *= -splashDamping;
-          this.vx *= 0.9;
-
-          if (Math.abs(this.vy) < 0.55) {
-            return false;
-          }
-        }
-
-        if (this.x < -20 || this.x > window.innerWidth + 20) {
-          return false;
-        }
-
-        return true;
-      }
-
-      draw() {
-        ctx.beginPath();
-        ctx.fillStyle = `rgba(140, 212, 255, ${this.opacity})`;
-        ctx.ellipse(this.x, this.y, this.radius * 0.85, this.radius * 1.2, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    class Ripple {
-      constructor(x, y, intensity) {
-        this.x = x;
-        this.y = y;
-        this.radius = 2;
-        this.speed = Math.min(4.2, 1.2 + intensity);
-        this.alpha = Math.min(0.7, 0.2 + intensity * 0.3);
-      }
-
-      update() {
-        this.radius += this.speed;
-        this.alpha *= 0.96;
-        this.speed *= 0.985;
-        return this.alpha > 0.02;
-      }
-
-      draw() {
-        ctx.beginPath();
-        ctx.strokeStyle = `rgba(110, 203, 255, ${this.alpha})`;
-        ctx.lineWidth = 1.5;
-        ctx.ellipse(this.x, this.y, this.radius * 1.25, this.radius * 0.35, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-    }
-
-    function spawnDrop(x = Math.random() * window.innerWidth, y = -8) {
-      if (drops.length < maxDrops) {
-        drops.push(new Drop(x, y));
-      }
-    }
-
-    function drawBackground(groundY) {
-      const sky = ctx.createLinearGradient(0, 0, 0, window.innerHeight);
-      sky.addColorStop(0, '#0c2344');
-      sky.addColorStop(1, '#02070f');
-      ctx.fillStyle = sky;
-      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-
-      const water = ctx.createLinearGradient(0, groundY - 20, 0, window.innerHeight);
-      water.addColorStop(0, 'rgba(34, 88, 130, 0.25)');
-      water.addColorStop(1, 'rgba(10, 37, 66, 0.9)');
-      ctx.fillStyle = water;
-      ctx.fillRect(0, groundY, window.innerWidth, window.innerHeight - groundY);
-    }
-
-    function render() {
-      const groundY = window.innerHeight * 0.86;
-      drawBackground(groundY);
-
-      if (autoRain) {
-        const rainCount = Math.floor(Math.random() * 3) + 2;
-        for (let i = 0; i < rainCount; i += 1) {
-          spawnDrop();
-        }
-      }
-
-      for (let i = drops.length - 1; i >= 0; i -= 1) {
-        if (!drops[i].update(groundY)) {
-          drops.splice(i, 1);
-          continue;
-        }
-        drops[i].draw();
-      }
-
-      for (let i = ripples.length - 1; i >= 0; i -= 1) {
-        if (!ripples[i].update()) {
-          ripples.splice(i, 1);
-          continue;
-        }
-        ripples[i].draw();
-      }
-
-      statsEl.textContent = `Drops: ${drops.length} | Ripples: ${ripples.length} | Auto-rain: ${autoRain ? 'ON' : 'OFF'}`;
-
-      requestAnimationFrame(render);
-    }
-
-    canvas.addEventListener('pointerdown', (event) => {
-      pointerDown = true;
-      for (let i = 0; i < 18; i += 1) {
-        spawnDrop(event.clientX + (Math.random() - 0.5) * 28, event.clientY - Math.random() * 12);
-      }
-    });
-
-    canvas.addEventListener('pointermove', (event) => {
-      if (!pointerDown) return;
-      for (let i = 0; i < 3; i += 1) {
-        spawnDrop(event.clientX + (Math.random() - 0.5) * 8, event.clientY);
-      }
-    });
-
-    window.addEventListener('pointerup', () => {
-      pointerDown = false;
-    });
-
-    window.addEventListener('keydown', (event) => {
-      if (event.key.toLowerCase() === 'r') {
-        autoRain = !autoRain;
-      }
-
-      if (event.key.toLowerCase() === 'c') {
-        drops.length = 0;
-        ripples.length = 0;
-      }
-    });
-
-    window.addEventListener('resize', resizeCanvas);
-
-    resizeCanvas();
-    render();
-  </script>
+  <header class="topbar"><div><div class="eyebrow">Advanced flow visualization / CFD-24</div><h1 class="title">VORTEX <span>FORMATION STUDY</span></h1></div><div class="run"><i class="pulse"></i> live solve &nbsp;|&nbsp; t = <span id="time">00.00</span> s</div></header>
+  <aside class="legend"><div><span class="key"></span> velocity</div><div><span class="key v"></span> flow direction</div><div><span class="key p"></span> pressure gradient</div></aside>
+  <section class="panel metrics"><div class="panel-head"><b>Field diagnostics</b><span>run 07</span></div><div class="metric"><span>Vorticity</span><strong id="vorticity">0.00 s⁻¹</strong><div class="bar"><i id="vortBar" style="width:2%"></i></div></div><div class="metric"><span>Core pressure</span><strong id="pressure">101.3 kPa</strong><div class="bar"><i id="pressBar" style="width:6%"></i></div></div><div class="metric"><span>Angular velocity</span><strong id="omega">0.00 rad/s</strong><div class="bar"><i id="omegaBar" style="width:1%"></i></div></div></section>
+  <section class="panel readout"><div>Reynolds <b id="reynolds">0.0 × 10⁵</b></div><div>Tracer count <b id="tracers">0</b></div><div>Resolution <b>2048³</b></div></section><div class="axis-label">z ↑ &nbsp; / &nbsp; x →</div><div class="hint">drag to orbit camera &nbsp;·&nbsp; scroll to inspect core &nbsp;·&nbsp; space to pause</div>
+  <canvas id="flow"></canvas>
+<script>
+(() => {
+  const canvas=document.getElementById('flow'), ctx=canvas.getContext('2d'); let W,H,DPR,frame=0,last=0,paused=false,zoom=0,drag=false,cam=0;
+  const particles=[], trails=[], motes=[]; const N=1150, streamN=92; let t=0;
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)); const rand=(a=1,b=0)=>Math.random()*(a-b)+b;
+  function resize(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=W*DPR;canvas.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0)}
+  function seed(){particles.length=0;trails.length=0;motes.length=0; for(let i=0;i<N;i++){let a=rand(Math.PI*2), r=Math.sqrt(rand())*.91+.045;particles.push({a,r,z:rand(1,-.3),seed:rand(99),life:rand(1),size:rand(1.65,.38)});}for(let i=0;i<streamN;i++){let a=i/streamN*Math.PI*2, r=.13+(i%8)*.085;trails.push({a,r,phase:rand(1),z:rand(.85,-.2)});}for(let i=0;i<180;i++)motes.push({x:rand(1),y:rand(1),s:rand(.8,.15)})}
+  function pxy(a,r,z){const scale=Math.min(W,H)*(.42+zoom*.08), cx=W*.52+Math.sin(cam)*18, cy=H*.51; const depth=1+(z-.3)*.16; return {x:cx+Math.cos(a)*r*scale*depth,y:cy+Math.sin(a)*r*scale*.50*depth-z*scale*.33,scale,depth}}
+  function field(r,phase){const power=clamp((t-1.2)/8,0,1); return {power,spin:(.22+4.4*power*power)/(r*.72+.16),down:power*(.012+.08*(1-r)+.014*Math.sin(phase*8+t*2)),inward:power*(.0009+.008*(1-r))}}
+  function bg(){let g=ctx.createRadialGradient(W*.52,H*.48,0,W*.52,H*.48,Math.max(W,H)*.68);g.addColorStop(0,'#0b2531');g.addColorStop(.28,'#06141d');g.addColorStop(.72,'#02070b');g.addColorStop(1,'#010304');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);ctx.save();ctx.globalAlpha=.18;for(const m of motes){ctx.fillStyle='#5499a8';ctx.fillRect(m.x*W,m.y*H,1,1)}ctx.restore()}
+  function fluidVolume(power){let c=pxy(0,0,0), s=c.scale;ctx.save(); for(let i=10;i>0;i--){let r=(.12+i*.073)*s, a=.006+i*.006*power; let g=ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,r);g.addColorStop(0,'rgba(71,215,239,0)');g.addColorStop(.54,`rgba(47,151,178,${a})`);g.addColorStop(1,'rgba(20,94,126,0)');ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(c.x,c.y+i*s*.012,r,r*.42,0,0,Math.PI*2);ctx.fill()}ctx.restore()}
+  function streams(power){ctx.save();ctx.lineCap='round';for(const q of trails){ctx.beginPath();let first=true;for(let j=0;j<75;j++){let u=j/74, r=q.r*(1-u*.72)+.013, a=q.a+u*(1.6+power*9.5)+t*(.25+power*1.1)/(q.r+.18), z=q.z-u*(.1+power*.86);let p=pxy(a,r,z);if(first){ctx.moveTo(p.x,p.y);first=false}else ctx.lineTo(p.x,p.y)}ctx.strokeStyle=`rgba(111,221,242,${.06+power*.13})`;ctx.lineWidth=.35+power*.5;ctx.stroke()}ctx.restore()}
+  function updateParticles(dt,power){ctx.save();ctx.globalCompositeOperation='lighter';for(const p of particles){let f=field(p.r,p.a), turb=power*power*(1-p.r)*.018; p.a+=f.spin*dt*(.25+power*.75)+Math.sin(t*2+p.seed)*turb;p.r-=f.inward*dt;p.z-=f.down*dt;p.z+=Math.sin(t*3+p.seed)*turb*.14;p.life+=dt;if(p.r<.017||p.z<-.72){p.r=.73+rand(.19);p.a=rand(Math.PI*2);p.z=rand(1.05,.45)} let q=pxy(p.a,p.r,p.z);let alpha=clamp(.22+power*.54-(p.r*.22),.08,.72);ctx.fillStyle=`rgba(${Math.round(122+power*100)},${Math.round(211+power*35)},255,${alpha})`;ctx.beginPath();ctx.arc(q.x,q.y,p.size*(.45+q.depth*.45),0,7);ctx.fill()}ctx.restore()}
+  function core(power){if(power<.03)return;let c=pxy(0,0,0),s=c.scale;ctx.save();ctx.globalCompositeOperation='lighter';let g=ctx.createRadialGradient(c.x,c.y-s*.02,0,c.x,c.y,s*.19);g.addColorStop(0,`rgba(0,0,0,${.2+power*.6})`);g.addColorStop(.34,`rgba(12,35,45,${.42+power*.25})`);g.addColorStop(.55,'rgba(67,218,239,.14)');g.addColorStop(1,'rgba(79,221,242,0)');ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(c.x,c.y+s*.18,s*.18,s*.48,0,0,7);ctx.fill();ctx.strokeStyle=`rgba(173,246,255,${power*.42})`;ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(c.x,c.y+s*.055,s*.055,s*.16,0,0,7);ctx.stroke();ctx.restore()}
+  function axis(){let x=W*.52+Math.sin(cam)*18,y=H*.51+Math.min(W,H)*(.42+zoom*.08)*.34;ctx.save();ctx.strokeStyle='rgba(154,221,234,.28)';ctx.lineWidth=1;ctx.setLineDash([3,6]);ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y-Math.min(W,H)*.67);ctx.stroke();ctx.setLineDash([]);ctx.strokeStyle='rgba(131,224,243,.45)';ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+25,y-10);ctx.moveTo(x,y);ctx.lineTo(x,y-28);ctx.stroke();ctx.restore()}
+  function render(now){requestAnimationFrame(render);if(paused)return;let dt=Math.min(.04,(now-last||16)/1000);last=now;t+=dt;frame++;let power=clamp((t-1.2)/8,0,1);bg();fluidVolume(power);streams(power);updateParticles(dt,power);core(power);axis();document.getElementById('time').textContent=t.toFixed(2).padStart(5,'0');document.getElementById('vorticity').textContent=(power*1430).toFixed(0)+' s⁻¹';document.getElementById('pressure').textContent=(101.3-power*31.7).toFixed(1)+' kPa';document.getElementById('omega').textContent=(power*92.4).toFixed(1)+' rad/s';document.getElementById('reynolds').textContent=(power*3.8).toFixed(1)+' × 10⁵';document.getElementById('tracers').textContent=N.toLocaleString();document.getElementById('vortBar').style.width=(2+power*94)+'%';document.getElementById('pressBar').style.width=(6+power*83)+'%';document.getElementById('omegaBar').style.width=(1+power*96)+'%'}
+  addEventListener('resize',resize);addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();paused=!paused;if(!paused){last=performance.now();requestAnimationFrame(render)}}if(e.key.toLowerCase()==='r'){t=0;seed()}});canvas.addEventListener('pointerdown',e=>{drag=true;cam=e.clientX/W*Math.PI*2});addEventListener('pointerup',()=>drag=false);addEventListener('pointermove',e=>{if(drag)cam=e.clientX/W*Math.PI*2});canvas.addEventListener('wheel',e=>{zoom=clamp(zoom-e.deltaY*.001, -.16,.22)},{passive:true});resize();seed();requestAnimationFrame(render);
+})();
+</script>
 </body>
 </html>
